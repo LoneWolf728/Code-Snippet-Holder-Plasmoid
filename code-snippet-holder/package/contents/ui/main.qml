@@ -14,12 +14,18 @@ PlasmoidItem {
     // Store snippets in plasmoid configuration
     property var snippets: []
     property bool isPinned: false
+    property int fontSize: 10
     
     // Control whether clicking outside closes the popup
     hideOnWindowDeactivate: !isPinned
     
     Component.onCompleted: {
         loadSnippets()
+        fontSize = plasmoid.configuration.fontSize || 10
+    }
+    
+    onFontSizeChanged: {
+        plasmoid.configuration.fontSize = fontSize
     }
     
     function loadSnippets() {
