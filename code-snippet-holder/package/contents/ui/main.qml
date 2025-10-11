@@ -122,6 +122,31 @@ PlasmoidItem {
                     text: "Code Snippets"
                     level: 3
                     Layout.fillWidth: true
+                    font.pixelSize: fontSize + 4
+                }
+                
+                PlasmaComponents3.Button {
+                    icon.name: "zoom-out"
+                    text: "-"
+                    enabled: fontSize > 6
+                    onClicked: {
+                        if (fontSize > 6) fontSize--
+                    }
+                    PlasmaComponents3.ToolTip {
+                        text: "Decrease font size"
+                    }
+                }
+                
+                PlasmaComponents3.Button {
+                    icon.name: "zoom-in"
+                    text: "+"
+                    enabled: fontSize < 24
+                    onClicked: {
+                        if (fontSize < 24) fontSize++
+                    }
+                    PlasmaComponents3.ToolTip {
+                        text: "Increase font size"
+                    }
                 }
                 
                 PlasmaComponents3.Button {
@@ -154,6 +179,7 @@ PlasmoidItem {
                 placeholderText: "Search snippets..."
                 clearButtonShown: true
                 onTextChanged: filterSnippets(text)
+                font.pixelSize: fontSize
             }
             
             // Snippet List
@@ -180,11 +206,13 @@ PlasmoidItem {
                                     text: model.title
                                     level: 4
                                     Layout.fillWidth: true
+                                    font.pixelSize: fontSize + 2
                                 }
                                 
                                 PlasmaComponents3.Button {
                                     icon.name: "edit-copy"
                                     text: "Copy"
+                                    font.pixelSize: fontSize
                                     onClicked: {
                                         // Find the actual index in snippetModel
                                         var actualIndex = -1
@@ -207,6 +235,7 @@ PlasmoidItem {
                                 PlasmaComponents3.Button {
                                     icon.name: "document-edit"
                                     text: "Edit"
+                                    font.pixelSize: fontSize
                                     onClicked: {
                                         // Find the actual index in snippetModel
                                         var actualIndex = -1
@@ -229,6 +258,7 @@ PlasmoidItem {
                                 PlasmaComponents3.Button {
                                     icon.name: "delete"
                                     text: "Delete"
+                                    font.pixelSize: fontSize
                                     onClicked: {
                                         // Find the actual index in snippetModel
                                         var actualIndex = -1
@@ -258,6 +288,7 @@ PlasmoidItem {
                                     readOnly: true
                                     wrapMode: Text.Wrap
                                     font.family: "monospace"
+                                    font.pixelSize: fontSize
                                     background: Rectangle {
                                         color: Kirigami.Theme.alternateBackgroundColor
                                         radius: 3
@@ -276,6 +307,7 @@ PlasmoidItem {
                 visible: false
                 text: ""
                 color: Kirigami.Theme.positiveTextColor
+                font.pixelSize: fontSize
                 
                 SequentialAnimation {
                     id: notificationAnimation
@@ -348,16 +380,19 @@ PlasmoidItem {
                 
                 PlasmaComponents3.Label {
                     text: "Title:"
+                    font.pixelSize: fontSize
                 }
                 
                 PlasmaComponents3.TextField {
                     id: titleField
                     Layout.fillWidth: true
                     placeholderText: "Snippet title..."
+                    font.pixelSize: fontSize
                 }
                 
                 PlasmaComponents3.Label {
                     text: "Code:"
+                    font.pixelSize: fontSize
                 }
                 
                 QQC2.ScrollView {
@@ -369,6 +404,7 @@ PlasmoidItem {
                         placeholderText: "// Your code here..."
                         wrapMode: Text.Wrap
                         font.family: "monospace"
+                        font.pixelSize: fontSize
                     }
                 }
             }
