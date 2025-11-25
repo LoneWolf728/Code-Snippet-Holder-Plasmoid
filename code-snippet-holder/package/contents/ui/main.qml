@@ -1,9 +1,11 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
+import Qt.labs.platform as Platform
 import org.kde.plasma.plasmoid
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
+import org.kde.plasma.plasma5support as Plasma5Support
 
 PlasmoidItem {
     id: root
@@ -213,6 +215,85 @@ PlasmoidItem {
         return -1
     }
     
+    // DataSource for executing shell commands
+    Plasma5Support.DataSource {
+        id: executable
+        engine: "executable"
+        connectedSources: []
+
+        // Flag to distinguish import vs export operations
+        property bool isImporting: false
+        
+        onNewData: function(sourceName, data) {
+            var stdout = data["stdout"]
+            var stderr = data["stderr"]
+            var exitCode = data["exit code"]
+            
+            disconnectSource(sourceName)
+            
+            if (isImporting) {
+                isImporting = false
+                if (exitCode === 0 && stdout) {
+                    try {
+                        var importedData = JSON.parse(stdout)
+                        if (importedData.groups && importedData.snippets) {
+                            groups = importedData.groups
+                            snippets = importedData.snippets
+                            saveData()
+                            refreshView()
+                            showNotification("Imported successfully!")
+                        } else {
+                            showNotification("Invalid file format!")
+                        }
+                    } catch (e) {
+                        showNotification("Error parsing file: " + e)
+                    }
+                } else {
+                    showNotification("Failed to read file: " + (stderr || "No data"))
+                }
+            } else {
+                // Export operation
+                if (exitCode === 0) {
+                    showNotification("Exported successfully!")
+                } else {
+                    showNotification("Export failed: " + (stderr || "Unknown error"))
+                }
+            }
+        }
+    }
+    
+    function exportData(fileUrl) {
+        var exportData = {
+            version: "1.0",
+            groups: groups,
+            snippets: snippets
+        }
+        var jsonData = JSON.stringify(exportData, null, 2) // Added formatting for readability
+        
+        // Convert file:// URL to path
+        var filePath = fileUrl.toString().replace(/^file:\/\//, '')
+        
+        // Escape the JSON data properly for shell
+        var escapedData = jsonData.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
+        
+        // Use printf to handle special characters better than echo
+        var cmd = 'printf "%s" "' + escapedData + '" > "' + filePath + '"'
+        
+        executable.connectSource(cmd)
+    }
+    
+    function importData(fileUrl) {
+        // Convert file:// URL to path
+        var filePath = fileUrl.toString().replace(/^file:\/\//, '')
+        
+        // Mark next operation as import
+        executable.isImporting = true
+        
+        // Use cat to read file (no custom prefix)
+        var cmd = "cat '" + filePath + "'"
+        executable.connectSource(cmd)
+    }
+    
     ListModel {
         id: displayModel
     }
@@ -294,6 +375,28 @@ PlasmoidItem {
                     }
                     PlasmaComponents3.ToolTip {
                         text: isPinned ? "Unpin window" : "Pin window to keep it open"
+                    }
+                }
+                
+                PlasmaComponents3.Button {
+                    icon.name: "document-import"
+                    text: "Import"
+                    onClicked: {
+                        importFileDialog.open()
+                    }
+                    PlasmaComponents3.ToolTip {
+                        text: "Import snippets from file"
+                    }
+                }
+                
+                PlasmaComponents3.Button {
+                    icon.name: "document-export"
+                    text: "Export"
+                    onClicked: {
+                        exportFileDialog.open()
+                    }
+                    PlasmaComponents3.ToolTip {
+                        text: "Export snippets to file"
                     }
                 }
                 
@@ -669,6 +772,31 @@ PlasmoidItem {
                         font.pixelSize: fontSize
                     }
                 }
+            }
+        }
+        
+        // Export File Dialog
+        Platform.FileDialog {
+            id: exportFileDialog
+            title: "Export Snippets"
+            fileMode: Platform.FileDialog.SaveFile
+            nameFilters: ["JSON files (*.json)"]
+            defaultSuffix: "json"
+            
+            onAccepted: {
+                exportData(file)
+            }
+        }
+        
+        // Import File Dialog
+        Platform.FileDialog {
+            id: importFileDialog
+            title: "Import Snippets"
+            fileMode: Platform.FileDialog.OpenFile
+            nameFilters: ["JSON files (*.json)"]
+            
+            onAccepted: {
+                importData(file)
             }
         }
     }
