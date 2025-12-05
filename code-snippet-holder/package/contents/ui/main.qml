@@ -237,11 +237,58 @@ PlasmoidItem {
                     try {
                         var importedData = JSON.parse(stdout)
                         if (importedData.groups && importedData.snippets) {
-                            groups = importedData.groups
-                            snippets = importedData.snippets
+                            // Merge imported data with existing data instead of replacing
+                            var maxGroupId = getNextId(groups) - 1
+                            var maxSnippetId = getNextId(snippets) - 1
+                            
+                            // Create a map of old group IDs to new group IDs
+                            var groupIdMap = {}
+                            
+                            // Import groups with new IDs
+                            for (var i = 0; i < importedData.groups.length; i++) {
+                                var importedGroup = importedData.groups[i]
+                                var oldId = importedGroup.id
+                                var newId = ++maxGroupId
+                                groupIdMap[oldId] = newId
+                                
+                                groups.push({
+                                    id: newId,
+                                    name: importedGroup.name,
+                                    parentId: importedGroup.parentId // Will be remapped below
+                                })
+                            }
+                            
+                            // Remap parent IDs for imported groups
+                            for (var j = 0; j < groups.length; j++) {
+                                var grp = groups[j]
+                                if (groupIdMap.hasOwnProperty(grp.parentId)) {
+                                    grp.parentId = groupIdMap[grp.parentId]
+                                }
+                            }
+                            
+                            // Import snippets with new IDs and remapped group IDs
+                            for (var k = 0; k < importedData.snippets.length; k++) {
+                                var importedSnippet = importedData.snippets[k]
+                                var newSnippetId = ++maxSnippetId
+                                var newGroupId = importedSnippet.groupId
+                                
+                                // Remap groupId if it was an imported group
+                                if (groupIdMap.hasOwnProperty(newGroupId)) {
+                                    newGroupId = groupIdMap[newGroupId]
+                                }
+                                
+                                snippets.push({
+                                    id: newSnippetId,
+                                    title: importedSnippet.title,
+                                    code: importedSnippet.code,
+                                    groupId: newGroupId
+                                })
+                            }
+                            
                             saveData()
                             refreshView()
-                            showNotification("Imported successfully!")
+                            var importedCount = importedData.groups.length + importedData.snippets.length
+                            showNotification("Imported " + importedCount + " items!")
                         } else {
                             showNotification("Invalid file format!")
                         }
@@ -345,7 +392,6 @@ PlasmoidItem {
                 
                 PlasmaComponents3.Button {
                     icon.name: "zoom-out"
-                    text: "-"
                     enabled: fontSize > 6
                     onClicked: {
                         if (fontSize > 6) fontSize--
@@ -357,7 +403,6 @@ PlasmoidItem {
                 
                 PlasmaComponents3.Button {
                     icon.name: "zoom-in"
-                    text: "+"
                     enabled: fontSize < 24
                     onClicked: {
                         if (fontSize < 24) fontSize++
@@ -369,7 +414,6 @@ PlasmoidItem {
                 
                 PlasmaComponents3.Button {
                     icon.name: isPinned ? "window-unpin" : "window-pin"
-                    text: isPinned ? "Unpin" : "Pin"
                     onClicked: {
                         isPinned = !isPinned
                     }
@@ -380,7 +424,6 @@ PlasmoidItem {
                 
                 PlasmaComponents3.Button {
                     icon.name: "document-import"
-                    text: "Import"
                     onClicked: {
                         importFileDialog.open()
                     }
@@ -391,7 +434,6 @@ PlasmoidItem {
                 
                 PlasmaComponents3.Button {
                     icon.name: "document-export"
-                    text: "Export"
                     onClicked: {
                         exportFileDialog.open()
                     }
@@ -402,7 +444,6 @@ PlasmoidItem {
                 
                 PlasmaComponents3.Button {
                     icon.name: "folder-new"
-                    text: "New Group"
                     onClicked: {
                         groupDialog.editIndex = -1
                         groupDialog.editName = "New Group"
@@ -415,7 +456,6 @@ PlasmoidItem {
                 
                 PlasmaComponents3.Button {
                     icon.name: "list-add"
-                    text: "New Snippet"
                     onClicked: {
                         editDialog.editIndex = -1
                         editDialog.editTitle = "New Snippet"
