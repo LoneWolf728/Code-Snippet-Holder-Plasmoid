@@ -1,6 +1,6 @@
 # Code Snippet Holder Plasmoid
 
-A KDE Plasma widget that allows you to store, organize, and quickly copy code snippets directly from your desktop panel.
+A KDE Plasma widget that allows you to store, organize, and quickly copy code snippets (Not just code snippets, but SQL queries, other notes, configs, etc... ) directly from your desktop panel.
 
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
 ![KDE Plasma](https://img.shields.io/badge/KDE%20Plasma-6.0%2B-blue.svg)
