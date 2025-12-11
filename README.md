@@ -6,6 +6,14 @@ A KDE Plasma widget that allows you to store, organize, and quickly copy code sn
 ![KDE Plasma](https://img.shields.io/badge/KDE%20Plasma-6.0%2B-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.0-green.svg)
 
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/Screenshot_1.png" width="45%" />
+  <img src="assets/Screenshot_2.png" width="45%" />
+</p>
+
 ## Features
 
 - **Store Code Snippets**: Save your frequently used code snippets with custom titles
