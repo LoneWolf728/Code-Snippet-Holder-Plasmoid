@@ -4,7 +4,7 @@ A KDE Plasma widget that allows you to store, organize, and quickly copy code sn
 
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
 ![KDE Plasma](https://img.shields.io/badge/KDE%20Plasma-6.0%2B-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.1-green.svg)
+![Version](https://img.shields.io/badge/version-1.0.3-green.svg)
 
 
 ## Screenshots
@@ -163,21 +163,8 @@ This project is licensed under the GPL-2.0+ License - see the [LICENSE](LICENSE)
 - Qt project for the QML framework
 - Contributors and users who provide feedback and suggestions
 
-
 ## Changelog
-
-### v1.0.1
-- Added option to set a custom storage file for snippets (Config > Custom Storage File)
-- Improved configuration UI
-
-### v1.0.0
-- Initial release
-- Basic snippet storage and management
-- Search and filter functionality
-- Copy to clipboard support
-- Font size customization
-- Pin window feature
-- Plasma 6.0 compatibility
+See [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
