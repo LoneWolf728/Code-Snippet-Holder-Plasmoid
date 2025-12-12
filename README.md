@@ -4,7 +4,7 @@ A KDE Plasma widget that allows you to store, organize, and quickly copy code sn
 
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
 ![KDE Plasma](https://img.shields.io/badge/KDE%20Plasma-6.0%2B-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0-green.svg)
+![Version](https://img.shields.io/badge/version-1.0.1-green.svg)
 
 
 ## Screenshots
@@ -23,7 +23,8 @@ A KDE Plasma widget that allows you to store, organize, and quickly copy code sn
 - **Customizable Font Size**: Adjust font size for better readability with zoom controls
 - **Pin Window**: Keep the widget window open while working
 - **Persistent Storage**: Snippets are automatically saved in Plasma configuration
-- **Import/Export**: Ability to Import or Export your saved snippets as a JSON file.
+- **Custom Storage File**: Optionally store and load your snippets from a custom JSON file path (set in widget settings)
+- **Import/Export**: Ability to Import or Export your saved snippets as a JSON file
 - **Native Integration**: Seamlessly integrates with KDE Plasma theme
 
 ## Installation
@@ -87,9 +88,10 @@ A KDE Plasma widget that allows you to store, organize, and quickly copy code sn
 
 ## Configuration
 
-The widget stores its configuration in the standard Plasma configuration system:
+You can configure the widget via its settings dialog:
 
-- **Snippets Data**: Stored as JSON in `snippetsData` configuration key
+- **Custom Storage File**: Set a custom file path to store and load your snippets as JSON. Leave empty to use the default internal storage.
+- **Snippets Data**: If no custom file is set, snippets are stored as JSON in the `snippetsData` configuration key.
 - **Font Size**: Stored in `fontSize` configuration key (range: 6-24)
 - **Auto-save**: All changes are automatically persisted
 
@@ -161,9 +163,14 @@ This project is licensed under the GPL-2.0+ License - see the [LICENSE](LICENSE)
 - Qt project for the QML framework
 - Contributors and users who provide feedback and suggestions
 
+
 ## Changelog
 
-### Version 1.0
+### v1.0.1
+- Added option to set a custom storage file for snippets (Config > Custom Storage File)
+- Improved configuration UI
+
+### v1.0.0
 - Initial release
 - Basic snippet storage and management
 - Search and filter functionality

@@ -3,7 +3,7 @@
     "KPlugin": {
         "Authors": [
             {
-                "Email": "dineth.sewwanda@protonmail.com", 
+                "Email": "dineth.sewwanda@protonmail.com",
                 "Name": "Lykon"
             }
         ],
@@ -14,7 +14,7 @@
         "License": "GPL-2.0+",
         "Name": "Code Snippets",
         "Version": "1.0",
-        "Website": "https://plasma.kde.org/"
+        "Website": "https://www.pling.com/p/2333778/"
     },
     "X-Plasma-API-Minimum-Version": "6.0",
     "X-Plasma-API": "declarativeappletscript",

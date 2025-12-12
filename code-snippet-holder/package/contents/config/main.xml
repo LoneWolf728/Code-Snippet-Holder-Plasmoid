@@ -12,6 +12,9 @@
     <entry name="groupsData" type="String">
       <default>[]</default>
     </entry>
+    <entry name="customFilePath" type="String">
+      <default></default>
+    </entry>
     <entry name="fontSize" type="Int">
       <default>10</default>
     </entry>

@@ -33,60 +33,98 @@ PlasmoidItem {
     onFontSizeChanged: {
         plasmoid.configuration.fontSize = fontSize
     }
+
+    Connections {
+        target: plasmoid.configuration
+        function onCustomFilePathChanged() {
+            loadData()
+        }
+    }
     
     function loadData() {
-        // Load groups
-        var savedGroups = plasmoid.configuration.groupsData
-        if (savedGroups) {
-            try {
-                groups = JSON.parse(savedGroups)
-            } catch (e) {
-                groups = []
-            }
-        }
+        var customPath = plasmoid.configuration.customFilePath
+        console.log("Loading data. Custom path:", customPath)
         
-        // Load snippets
-        var savedSnippets = plasmoid.configuration.snippetsData
-        if (savedSnippets) {
-            try {
-                snippets = JSON.parse(savedSnippets)
-            } catch (e) {
-                snippets = []
-            }
-        }
-        
-        // Add example data if empty
-        if (groups.length === 0 && snippets.length === 0) {
-            groups = [
-                {
-                    id: 1,
-                    name: "JavaScript",
-                    parentId: -1
+        if (customPath && customPath.length > 0) {
+            // Load from custom file using executable data source
+            var cmd = "cat '" + customPath.replace(/'/g, "'\\''") + "'"
+            executable.isLoadingCustom = true
+            executable.connectSource(cmd)
+        } else {
+            // Load groups from config
+            var savedGroups = plasmoid.configuration.groupsData
+            if (savedGroups) {
+                try {
+                    groups = JSON.parse(savedGroups)
+                } catch (e) {
+                    groups = []
                 }
-            ]
-            snippets = [
-                {
-                    id: 1,
-                    title: "Example Snippet",
-                    code: "console.log('Hello World!');",
-                    groupId: 1
-                },
-                {
-                    id: 2,
-                    title: "Ungrouped Snippet",
-                    code: "// This snippet has no group",
-                    groupId: -1
+            }
+            
+            // Load snippets from config
+            var savedSnippets = plasmoid.configuration.snippetsData
+            if (savedSnippets) {
+                try {
+                    snippets = JSON.parse(savedSnippets)
+                } catch (e) {
+                    snippets = []
                 }
-            ]
-            saveData()
+            }
+            
+            // Add example data if empty
+            if (groups.length === 0 && snippets.length === 0) {
+                groups = [
+                    {
+                        id: 1,
+                        name: "JavaScript",
+                        parentId: -1
+                    }
+                ]
+                snippets = [
+                    {
+                        id: 1,
+                        title: "Example Snippet",
+                        code: "console.log('Hello World!');",
+                        groupId: 1
+                    },
+                    {
+                        id: 2,
+                        title: "Ungrouped Snippet",
+                        code: "// This snippet has no group",
+                        groupId: -1
+                    }
+                ]
+                saveData()
+            }
+            
+            refreshView()
         }
-        
-        refreshView()
     }
     
     function saveData() {
-        plasmoid.configuration.groupsData = JSON.stringify(groups)
-        plasmoid.configuration.snippetsData = JSON.stringify(snippets)
+        var customPath = plasmoid.configuration.customFilePath
+        
+        if (customPath && customPath.length > 0) {
+           var exportData = {
+                version: "1.0",
+                groups: groups,
+                snippets: snippets
+            }
+            var jsonData = JSON.stringify(exportData, null, 2)
+            
+            // Convert to path if it's a URL (just in case)
+            var filePath = customPath.toString().replace(/^file:\/\//, '')
+            
+            // Escape for shell
+            var escapedData = jsonData.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
+            
+            var cmd = 'printf "%s" "' + escapedData + '" > "' + filePath + '"'
+            executable.connectSource(cmd)
+        } else {
+            // Save to config
+            plasmoid.configuration.groupsData = JSON.stringify(groups)
+            plasmoid.configuration.snippetsData = JSON.stringify(snippets)
+        }
     }
     
     function refreshView() {
@@ -221,8 +259,10 @@ PlasmoidItem {
         engine: "executable"
         connectedSources: []
 
-        // Flag to distinguish import vs export operations
+        // Flag to distinguish import vs export vs loading operations
         property bool isImporting: false
+        property bool isLoadingCustom: false
+
         
         onNewData: function(sourceName, data) {
             var stdout = data["stdout"]
@@ -298,12 +338,37 @@ PlasmoidItem {
                 } else {
                     showNotification("Failed to read file: " + (stderr || "No data"))
                 }
+        } else if (isLoadingCustom) {
+                 isLoadingCustom = false
+                 if (exitCode === 0 && stdout) {
+                     try {
+                         var data = JSON.parse(stdout)
+                         // Support both formats: raw arrays check or wrapped object
+                         if (data.groups && data.snippets) {
+                             groups = data.groups
+                             snippets = data.snippets
+                         } else {
+                             // Maybe it is a direct file dump? Assuming standard format
+                             // Fallback attempts could go here
+                             console.warn("Loaded file format unrecognized, expecting {groups: [], snippets: []}")
+                         }
+                         refreshView()
+                         showNotification("Loaded data from file")
+                     } catch (e) {
+                         showNotification("Error parsing custom file: " + e)
+                     }
+                 } else {
+                    // Start fresh if file doesn't exist or error?
+                    // Ideally we might want to create it if empty
+                    console.warn("Failed to load custom file" + stderr)
+                 }
             } else {
-                // Export operation
+                // Export or Save operation
                 if (exitCode === 0) {
-                    showNotification("Exported successfully!")
+                    // If it was a save operation, maybe show nothing to avoid spam
+                     console.log("Data saved successfully")
                 } else {
-                    showNotification("Export failed: " + (stderr || "Unknown error"))
+                    showNotification("Save/Export failed: " + (stderr || "Unknown error"))
                 }
             }
         }
