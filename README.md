@@ -4,7 +4,7 @@ A KDE Plasma widget that allows you to store, organize, and quickly copy code sn
 
 ![License](https://img.shields.io/badge/license-GPL--2.0%2B-blue.svg)
 ![KDE Plasma](https://img.shields.io/badge/KDE%20Plasma-6.0%2B-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.3-green.svg)
+![Version](https://img.shields.io/badge/version-1.0.4-green.svg)
 
 
 ## Screenshots
@@ -23,8 +23,11 @@ A KDE Plasma widget that allows you to store, organize, and quickly copy code sn
 - **Customizable Font Size**: Adjust font size for better readability with zoom controls
 - **Pin Window**: Keep the widget window open while working
 - **Persistent Storage**: Snippets are automatically saved in Plasma configuration
-- **Custom Storage File**: Optionally store and load your snippets from a custom JSON file path (set in widget settings)
-- **Import/Export**: Ability to Import or Export your saved snippets as a JSON file
+- **Custom Storage Location**: Optionally store and load your snippets from a custom file or folder
+- **Multiple Storage Formats**:
+  - **JSON**: Single file storage (default)
+  - **Markdown**: Directory-based storage where groups become folders and snippets become individual `.md` files
+- **Import/Export**: Import or export snippets in JSON or Markdown format
 - **Native Integration**: Seamlessly integrates with KDE Plasma theme
 
 ## Installation
@@ -90,10 +93,38 @@ A KDE Plasma widget that allows you to store, organize, and quickly copy code sn
 
 You can configure the widget via its settings dialog:
 
-- **Custom Storage File**: Set a custom file path to store and load your snippets as JSON. Leave empty to use the default internal storage.
-- **Snippets Data**: If no custom file is set, snippets are stored as JSON in the `snippetsData` configuration key.
+- **Storage Format**: Choose between JSON (single file) or Markdown (directory structure)
+- **Custom Storage Location**: 
+  - For JSON: Set a custom file path to store snippets
+  - For Markdown: Set a custom folder path where groups become subfolders and snippets become `.md` files
 - **Font Size**: Stored in `fontSize` configuration key (range: 6-24)
 - **Auto-save**: All changes are automatically persisted
+
+### Markdown Storage Format
+
+When using Markdown format, snippets are stored as individual files with YAML frontmatter:
+
+```markdown
+---
+title: Example Snippet
+id: 1
+---
+
+```
+console.log('Hello World!');
+```
+```
+
+Directory structure example:
+```
+snippets_folder/
+├── _ungrouped/
+│   └── Ungrouped Snippet.md
+└── JavaScript/
+    ├── Example Snippet.md
+    └── Nested Group/
+        └── Another Snippet.md
+```
 
 ## Technical Details
 

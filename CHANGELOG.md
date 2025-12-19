@@ -5,6 +5,19 @@ Adheres to [Keep a Changelog](https://keepachangelog.com/) and [Semantic Version
 
 ---
 
+## [1.0.4] - 2025-12-19
+### Added
+- **Markdown Storage Format**: New storage option that saves snippets as individual `.md` files with YAML frontmatter
+  - Groups become folders in the directory structure
+  - Snippets become markdown files with title and code in frontmatter
+  - Ungrouped snippets are stored in `_ungrouped/` folder
+- **Storage Format Selection**: Choose between JSON (single file) or Markdown (directory) in widget settings
+- **Folder Picker**: When using Markdown format, browse for a folder instead of a file
+- **Enhanced Import/Export**: Import and export dialogs now let you choose between JSON or Markdown formats
+- **Markdown Import**: Import snippets from existing markdown directory structures
+
+---
+
 ## [1.0.3] - 2025-12-12
 ### Added / Improved
 - Custom Storage File: Store/load snippets from a custom JSON file path. So multiple instances of the plasmoid can share the same file. Useful for user's with multiple monitors who used multiple instances of the plasmoid. (Community Suggestion.)

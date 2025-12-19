@@ -39,17 +39,27 @@ PlasmoidItem {
         function onCustomFilePathChanged() {
             loadData()
         }
+        function onStorageFormatChanged() {
+            loadData()
+        }
     }
     
     function loadData() {
         var customPath = plasmoid.configuration.customFilePath
-        console.log("Loading data. Custom path:", customPath)
+        var storageFormat = plasmoid.configuration.storageFormat || "json"
+        console.log("Loading data. Custom path:", customPath, "Format:", storageFormat)
         
         if (customPath && customPath.length > 0) {
-            // Load from custom file using executable data source
-            var cmd = "cat '" + customPath.replace(/'/g, "'\\''") + "'"
-            executable.isLoadingCustom = true
-            executable.connectSource(cmd)
+            if (storageFormat === "markdown") {
+                // Load from markdown directory structure
+                loadFromMarkdown(customPath)
+            } else {
+                // Load from JSON file using executable data source
+                var cmd = "cat '" + customPath.replace(/'/g, "'\\''" ) + "'"
+                executable.isLoadingCustom = true
+                executable.isLoadingMarkdown = false
+                executable.connectSource(cmd)
+            }
         } else {
             // Load groups from config
             var savedGroups = plasmoid.configuration.groupsData
@@ -103,23 +113,30 @@ PlasmoidItem {
     
     function saveData() {
         var customPath = plasmoid.configuration.customFilePath
+        var storageFormat = plasmoid.configuration.storageFormat || "json"
         
         if (customPath && customPath.length > 0) {
-           var exportData = {
-                version: "1.0",
-                groups: groups,
-                snippets: snippets
+            if (storageFormat === "markdown") {
+                // Save as markdown directory structure
+                saveAsMarkdown(customPath)
+            } else {
+                // Save as JSON file
+                var exportData = {
+                    version: "1.0",
+                    groups: groups,
+                    snippets: snippets
+                }
+                var jsonData = JSON.stringify(exportData, null, 2)
+                
+                // Convert to path if it's a URL (just in case)
+                var filePath = customPath.toString().replace(/^file:\/\//, '')
+                
+                // Escape for shell
+                var escapedData = jsonData.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
+                
+                var cmd = 'printf "%s" "' + escapedData + '" > "' + filePath + '"'
+                executable.connectSource(cmd)
             }
-            var jsonData = JSON.stringify(exportData, null, 2)
-            
-            // Convert to path if it's a URL (just in case)
-            var filePath = customPath.toString().replace(/^file:\/\//, '')
-            
-            // Escape for shell
-            var escapedData = jsonData.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
-            
-            var cmd = 'printf "%s" "' + escapedData + '" > "' + filePath + '"'
-            executable.connectSource(cmd)
         } else {
             // Save to config
             plasmoid.configuration.groupsData = JSON.stringify(groups)
@@ -253,6 +270,217 @@ PlasmoidItem {
         return -1
     }
     
+    // Helper function to sanitize filenames
+    function sanitizeFilename(name) {
+        // Replace invalid characters with underscores
+        return name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim()
+    }
+    
+    // Helper function to build group path
+    function getGroupPath(groupId, basePath) {
+        if (groupId === -1) {
+            return basePath + "/_ungrouped"
+        }
+        
+        var pathParts = []
+        var currentId = groupId
+        
+        while (currentId !== -1) {
+            var found = false
+            for (var i = 0; i < groups.length; i++) {
+                if (groups[i].id === currentId) {
+                    pathParts.unshift(sanitizeFilename(groups[i].name))
+                    currentId = groups[i].parentId
+                    found = true
+                    break
+                }
+            }
+            if (!found) break
+        }
+        
+        return basePath + "/" + pathParts.join("/")
+    }
+    
+    // Save data as markdown directory structure
+    function saveAsMarkdown(basePath) {
+        basePath = basePath.toString().replace(/^file:\/\//, '').replace(/\/$/, '')
+        
+        // Build the complete save script
+        var script = "#!/bin/bash\n"
+        script += "set -e\n"
+        script += "BASE_PATH='" + basePath.replace(/'/g, "'\\''") + "'\n"
+        
+        // Create base directory
+        script += "mkdir -p \"$BASE_PATH\"\n"
+        
+        // Track which directories we need
+        var dirsNeeded = {}
+        dirsNeeded[basePath + "/_ungrouped"] = true
+        
+        // Create directories for all groups
+        for (var i = 0; i < groups.length; i++) {
+            var group = groups[i]
+            var groupPath = getGroupPath(group.id, basePath)
+            dirsNeeded[groupPath] = true
+        }
+        
+        // Create all directories
+        for (var dir in dirsNeeded) {
+            script += "mkdir -p '" + dir.replace(/'/g, "'\\''") + "'\n"
+        }
+        
+        // Write each snippet as a markdown file
+        for (var j = 0; j < snippets.length; j++) {
+            var snippet = snippets[j]
+            var snippetPath = getGroupPath(snippet.groupId, basePath)
+            var filename = sanitizeFilename(snippet.title) + ".md"
+            var fullPath = snippetPath + "/" + filename
+            
+            // Create markdown content with frontmatter
+            var mdContent = "---\n"
+            mdContent += "title: " + snippet.title.replace(/:/g, "\\:") + "\n"
+            mdContent += "id: " + snippet.id + "\n"
+            mdContent += "---\n\n"
+            mdContent += "```\n"
+            mdContent += snippet.code + "\n"
+            mdContent += "```\n"
+            
+            // Escape for shell
+            var escapedContent = mdContent.replace(/\\/g, '\\\\').replace(/'/g, "'\\''").replace(/\$/g, '\\$')
+            
+            script += "cat > '" + fullPath.replace(/'/g, "'\\''") + "' << 'SNIPPET_EOF'\n"
+            script += mdContent
+            script += "SNIPPET_EOF\n"
+        }
+        
+        // Execute the script
+        var cmd = "bash -c '" + script.replace(/'/g, "'\\''") + "'"
+        executable.connectSource(cmd)
+    }
+    
+    // Load data from markdown directory structure
+    function loadFromMarkdown(basePath) {
+        basePath = basePath.toString().replace(/^file:\/\//, '').replace(/\/$/, '')
+        
+        // Use find to get all .md files and directory structure
+        var cmd = "find '" + basePath.replace(/'/g, "'\\''") + "' -type f -name '*.md' -exec sh -c 'echo \"FILE_START\"; echo \"{}\" ; echo \"FILE_CONTENT_START\"; cat \"{}\" ; echo \"FILE_CONTENT_END\"' \\;"
+        
+        executable.isLoadingMarkdown = true
+        executable.isLoadingCustom = false
+        executable.markdownBasePath = basePath
+        executable.connectSource(cmd)
+    }
+    
+    // Parse markdown files output and reconstruct data
+    function parseMarkdownOutput(output, basePath) {
+        var newGroups = []
+        var newSnippets = []
+        var groupIdMap = {} // path -> id
+        var nextGroupId = 1
+        var nextSnippetId = 1
+        
+        // Parse each file
+        var files = output.split("FILE_START")
+        
+        for (var i = 1; i < files.length; i++) {
+            var fileBlock = files[i]
+            var pathMatch = fileBlock.indexOf("FILE_CONTENT_START")
+            if (pathMatch === -1) continue
+            
+            var filePath = fileBlock.substring(0, pathMatch).trim()
+            var contentStart = pathMatch + "FILE_CONTENT_START".length
+            var contentEnd = fileBlock.indexOf("FILE_CONTENT_END")
+            if (contentEnd === -1) contentEnd = fileBlock.length
+            
+            var content = fileBlock.substring(contentStart, contentEnd).trim()
+            
+            // Get relative path from base
+            var relativePath = filePath.replace(basePath + "/", "")
+            var pathParts = relativePath.split("/")
+            var filename = pathParts.pop() // Remove filename
+            
+            // Create groups for path parts
+            var parentId = -1
+            var currentPath = basePath
+            
+            for (var p = 0; p < pathParts.length; p++) {
+                var part = pathParts[p]
+                currentPath += "/" + part
+                
+                // Skip _ungrouped folder
+                if (part === "_ungrouped") {
+                    parentId = -1
+                    continue
+                }
+                
+                if (!groupIdMap.hasOwnProperty(currentPath)) {
+                    var newGroupId = nextGroupId++
+                    groupIdMap[currentPath] = newGroupId
+                    newGroups.push({
+                        id: newGroupId,
+                        name: part,
+                        parentId: parentId
+                    })
+                }
+                parentId = groupIdMap[currentPath]
+            }
+            
+            // Parse markdown content
+            var title = filename.replace(/\.md$/, '')
+            var code = ""
+            var snippetId = nextSnippetId++
+            
+            // Parse frontmatter
+            if (content.startsWith("---")) {
+                var frontmatterEnd = content.indexOf("---", 3)
+                if (frontmatterEnd !== -1) {
+                    var frontmatter = content.substring(3, frontmatterEnd)
+                    var lines = frontmatter.split("\n")
+                    for (var l = 0; l < lines.length; l++) {
+                        var line = lines[l].trim()
+                        if (line.startsWith("title:")) {
+                            title = line.substring(6).trim().replace(/^["']|["']$/g, '').replace(/\\:/g, ':')
+                        }
+                        if (line.startsWith("id:")) {
+                            var parsedId = parseInt(line.substring(3).trim())
+                            if (!isNaN(parsedId)) {
+                                snippetId = parsedId
+                                if (parsedId >= nextSnippetId) nextSnippetId = parsedId + 1
+                            }
+                        }
+                    }
+                    content = content.substring(frontmatterEnd + 3).trim()
+                }
+            }
+            
+            // Extract code from code block
+            var codeBlockStart = content.indexOf("```")
+            if (codeBlockStart !== -1) {
+                var codeStart = content.indexOf("\n", codeBlockStart) + 1
+                var codeEnd = content.indexOf("```", codeStart)
+                if (codeEnd === -1) codeEnd = content.length
+                code = content.substring(codeStart, codeEnd).trim()
+            } else {
+                code = content
+            }
+            
+            newSnippets.push({
+                id: snippetId,
+                title: title,
+                code: code,
+                groupId: parentId
+            })
+        }
+        
+        groups = newGroups
+        snippets = newSnippets
+        refreshView()
+        
+        if (newSnippets.length > 0 || newGroups.length > 0) {
+            showNotification("Loaded " + newGroups.length + " groups and " + newSnippets.length + " snippets")
+        }
+    }
+    
     // DataSource for executing shell commands
     Plasma5Support.DataSource {
         id: executable
@@ -261,7 +489,10 @@ PlasmoidItem {
 
         // Flag to distinguish import vs export vs loading operations
         property bool isImporting: false
+        property bool isImportingMarkdown: false
         property bool isLoadingCustom: false
+        property bool isLoadingMarkdown: false
+        property string markdownBasePath: ""
 
         
         onNewData: function(sourceName, data) {
@@ -338,7 +569,159 @@ PlasmoidItem {
                 } else {
                     showNotification("Failed to read file: " + (stderr || "No data"))
                 }
-        } else if (isLoadingCustom) {
+        } else if (isLoadingMarkdown) {
+                isLoadingMarkdown = false
+                if (exitCode === 0 && stdout) {
+                    parseMarkdownOutput(stdout, markdownBasePath)
+                } else if (exitCode !== 0) {
+                    console.warn("Failed to load markdown directory: " + stderr)
+                    // Initialize empty if directory doesn't exist
+                    groups = []
+                    snippets = []
+                    refreshView()
+                }
+            } else if (isImportingMarkdown) {
+                isImportingMarkdown = false
+                if (exitCode === 0 && stdout) {
+                    // Parse the markdown and merge with existing data
+                    var importedGroups = []
+                    var importedSnippets = []
+                    var groupIdMap = {}
+                    var nextGroupId = 1
+                    var nextSnippetId = 1
+                    
+                    // Parse each file (similar to parseMarkdownOutput)
+                    var files = stdout.split("FILE_START")
+                    
+                    for (var i = 1; i < files.length; i++) {
+                        var fileBlock = files[i]
+                        var pathMatch = fileBlock.indexOf("FILE_CONTENT_START")
+                        if (pathMatch === -1) continue
+                        
+                        var filePath = fileBlock.substring(0, pathMatch).trim()
+                        var contentStart = pathMatch + "FILE_CONTENT_START".length
+                        var contentEnd = fileBlock.indexOf("FILE_CONTENT_END")
+                        if (contentEnd === -1) contentEnd = fileBlock.length
+                        
+                        var content = fileBlock.substring(contentStart, contentEnd).trim()
+                        
+                        // Get relative path from base
+                        var relativePath = filePath.replace(markdownBasePath + "/", "")
+                        var pathParts = relativePath.split("/")
+                        var filename = pathParts.pop()
+                        
+                        // Create groups for path parts
+                        var parentId = -1
+                        var currentPath = markdownBasePath
+                        
+                        for (var p = 0; p < pathParts.length; p++) {
+                            var part = pathParts[p]
+                            currentPath += "/" + part
+                            
+                            if (part === "_ungrouped") {
+                                parentId = -1
+                                continue
+                            }
+                            
+                            if (!groupIdMap.hasOwnProperty(currentPath)) {
+                                var newGroupId = nextGroupId++
+                                groupIdMap[currentPath] = newGroupId
+                                importedGroups.push({
+                                    id: newGroupId,
+                                    name: part,
+                                    parentId: parentId
+                                })
+                            }
+                            parentId = groupIdMap[currentPath]
+                        }
+                        
+                        // Parse markdown content
+                        var title = filename.replace(/\.md$/, '')
+                        var code = ""
+                        var snippetId = nextSnippetId++
+                        
+                        if (content.startsWith("---")) {
+                            var frontmatterEnd = content.indexOf("---", 3)
+                            if (frontmatterEnd !== -1) {
+                                var frontmatter = content.substring(3, frontmatterEnd)
+                                var lines = frontmatter.split("\n")
+                                for (var l = 0; l < lines.length; l++) {
+                                    var line = lines[l].trim()
+                                    if (line.startsWith("title:")) {
+                                        title = line.substring(6).trim().replace(/^["']|["']$/g, '').replace(/\\:/g, ':')
+                                    }
+                                }
+                                content = content.substring(frontmatterEnd + 3).trim()
+                            }
+                        }
+                        
+                        var codeBlockStart = content.indexOf("```")
+                        if (codeBlockStart !== -1) {
+                            var codeStart = content.indexOf("\n", codeBlockStart) + 1
+                            var codeEnd = content.indexOf("```", codeStart)
+                            if (codeEnd === -1) codeEnd = content.length
+                            code = content.substring(codeStart, codeEnd).trim()
+                        } else {
+                            code = content
+                        }
+                        
+                        importedSnippets.push({
+                            id: snippetId,
+                            title: title,
+                            code: code,
+                            groupId: parentId
+                        })
+                    }
+                    
+                    // Merge with existing data (remap IDs to avoid conflicts)
+                    var maxGroupId = getNextId(groups) - 1
+                    var maxSnippetId = getNextId(snippets) - 1
+                    var mergeGroupIdMap = {}
+                    
+                    for (var gi = 0; gi < importedGroups.length; gi++) {
+                        var importedGrp = importedGroups[gi]
+                        var oldGrpId = importedGrp.id
+                        var newGrpId = ++maxGroupId
+                        mergeGroupIdMap[oldGrpId] = newGrpId
+                        
+                        groups.push({
+                            id: newGrpId,
+                            name: importedGrp.name,
+                            parentId: importedGrp.parentId
+                        })
+                    }
+                    
+                    // Remap parent IDs
+                    for (var gj = 0; gj < groups.length; gj++) {
+                        if (mergeGroupIdMap.hasOwnProperty(groups[gj].parentId)) {
+                            groups[gj].parentId = mergeGroupIdMap[groups[gj].parentId]
+                        }
+                    }
+                    
+                    for (var si = 0; si < importedSnippets.length; si++) {
+                        var importedSnip = importedSnippets[si]
+                        var newSnipId = ++maxSnippetId
+                        var newGrpIdForSnip = importedSnip.groupId
+                        
+                        if (mergeGroupIdMap.hasOwnProperty(newGrpIdForSnip)) {
+                            newGrpIdForSnip = mergeGroupIdMap[newGrpIdForSnip]
+                        }
+                        
+                        snippets.push({
+                            id: newSnipId,
+                            title: importedSnip.title,
+                            code: importedSnip.code,
+                            groupId: newGrpIdForSnip
+                        })
+                    }
+                    
+                    saveData()
+                    refreshView()
+                    showNotification("Imported " + importedGroups.length + " groups and " + importedSnippets.length + " snippets!")
+                } else {
+                    showNotification("Failed to import markdown: " + (stderr || "No files found"))
+                }
+            } else if (isLoadingCustom) {
                  isLoadingCustom = false
                  if (exitCode === 0 && stdout) {
                      try {
@@ -380,7 +763,7 @@ PlasmoidItem {
             groups: groups,
             snippets: snippets
         }
-        var jsonData = JSON.stringify(exportData, null, 2) // Added formatting for readability
+        var jsonData = JSON.stringify(exportData, null, 2)
         
         // Convert file:// URL to path
         var filePath = fileUrl.toString().replace(/^file:\/\//, '')
@@ -392,6 +775,65 @@ PlasmoidItem {
         var cmd = 'printf "%s" "' + escapedData + '" > "' + filePath + '"'
         
         executable.connectSource(cmd)
+        showNotification("Exported to JSON file")
+    }
+    
+    function exportDataAsMarkdown(folderUrl) {
+        // Export as markdown directory structure
+        var folderPath = folderUrl.toString().replace(/^file:\/\//, '')
+        
+        // Use the same saveAsMarkdown logic but to a different location
+        var basePath = folderPath.replace(/\/$/, '')
+        
+        // Build the complete save script
+        var script = "#!/bin/bash\n"
+        script += "set -e\n"
+        script += "BASE_PATH='" + basePath.replace(/'/g, "'\\''" ) + "'\n"
+        
+        // Create base directory
+        script += "mkdir -p \"$BASE_PATH\"\n"
+        
+        // Track which directories we need
+        var dirsNeeded = {}
+        dirsNeeded[basePath + "/_ungrouped"] = true
+        
+        // Create directories for all groups
+        for (var i = 0; i < groups.length; i++) {
+            var group = groups[i]
+            var groupPath = getGroupPath(group.id, basePath)
+            dirsNeeded[groupPath] = true
+        }
+        
+        // Create all directories
+        for (var dir in dirsNeeded) {
+            script += "mkdir -p '" + dir.replace(/'/g, "'\\''" ) + "'\n"
+        }
+        
+        // Write each snippet as a markdown file
+        for (var j = 0; j < snippets.length; j++) {
+            var snippet = snippets[j]
+            var snippetPath = getGroupPath(snippet.groupId, basePath)
+            var filename = sanitizeFilename(snippet.title) + ".md"
+            var fullPath = snippetPath + "/" + filename
+            
+            // Create markdown content with frontmatter
+            var mdContent = "---\n"
+            mdContent += "title: " + snippet.title.replace(/:/g, "\\:") + "\n"
+            mdContent += "id: " + snippet.id + "\n"
+            mdContent += "---\n\n"
+            mdContent += "```\n"
+            mdContent += snippet.code + "\n"
+            mdContent += "```\n"
+            
+            script += "cat > '" + fullPath.replace(/'/g, "'\\''" ) + "' << 'SNIPPET_EOF'\n"
+            script += mdContent
+            script += "SNIPPET_EOF\n"
+        }
+        
+        // Execute the script
+        var cmd = "bash -c '" + script.replace(/'/g, "'\\''" ) + "'"
+        executable.connectSource(cmd)
+        showNotification("Exported as Markdown directory")
     }
     
     function importData(fileUrl) {
@@ -403,6 +845,18 @@ PlasmoidItem {
         
         // Use cat to read file (no custom prefix)
         var cmd = "cat '" + filePath + "'"
+        executable.connectSource(cmd)
+    }
+    
+    function importDataFromMarkdown(folderUrl) {
+        // Import from markdown directory structure
+        var folderPath = folderUrl.toString().replace(/^file:\/\//, '').replace(/\/$/, '')
+        
+        // Use find to get all .md files and directory structure
+        var cmd = "find '" + folderPath.replace(/'/g, "'\\''" ) + "' -type f -name '*.md' -exec sh -c 'echo \"FILE_START\"; echo \"{}\" ; echo \"FILE_CONTENT_START\"; cat \"{}\" ; echo \"FILE_CONTENT_END\"' \\;"
+        
+        executable.isImportingMarkdown = true
+        executable.markdownBasePath = folderPath
         executable.connectSource(cmd)
     }
     
@@ -490,20 +944,20 @@ PlasmoidItem {
                 PlasmaComponents3.Button {
                     icon.name: "document-import"
                     onClicked: {
-                        importFileDialog.open()
+                        importFormatDialog.open()
                     }
                     PlasmaComponents3.ToolTip {
-                        text: "Import snippets from file"
+                        text: "Import snippets from file or folder"
                     }
                 }
                 
                 PlasmaComponents3.Button {
                     icon.name: "document-export"
                     onClicked: {
-                        exportFileDialog.open()
+                        exportFormatDialog.open()
                     }
                     PlasmaComponents3.ToolTip {
-                        text: "Export snippets to file"
+                        text: "Export snippets to file or folder"
                     }
                 }
                 
@@ -880,10 +1334,10 @@ PlasmoidItem {
             }
         }
         
-        // Export File Dialog
+        // Export File Dialog (JSON)
         Platform.FileDialog {
             id: exportFileDialog
-            title: "Export Snippets"
+            title: "Export Snippets as JSON"
             fileMode: Platform.FileDialog.SaveFile
             nameFilters: ["JSON files (*.json)"]
             defaultSuffix: "json"
@@ -893,15 +1347,119 @@ PlasmoidItem {
             }
         }
         
-        // Import File Dialog
+        // Export Folder Dialog (Markdown)
+        Platform.FolderDialog {
+            id: exportFolderDialog
+            title: "Export Snippets as Markdown (select folder)"
+            
+            onAccepted: {
+                exportDataAsMarkdown(folder)
+            }
+        }
+        
+        // Import File Dialog (JSON)
         Platform.FileDialog {
             id: importFileDialog
-            title: "Import Snippets"
+            title: "Import Snippets from JSON"
             fileMode: Platform.FileDialog.OpenFile
             nameFilters: ["JSON files (*.json)"]
             
             onAccepted: {
                 importData(file)
+            }
+        }
+        
+        // Import Folder Dialog (Markdown)
+        Platform.FolderDialog {
+            id: importFolderDialog
+            title: "Import Snippets from Markdown folder"
+            
+            onAccepted: {
+                importDataFromMarkdown(folder)
+            }
+        }
+        
+        // Export Format Selection Dialog
+        QQC2.Dialog {
+            id: exportFormatDialog
+            title: "Export Format"
+            modal: true
+            standardButtons: QQC2.Dialog.Cancel
+            
+            x: Math.round((parent.width - width) / 2)
+            y: Math.round((parent.height - height) / 2)
+            width: Math.min(parent.width * 0.6, Kirigami.Units.gridUnit * 18)
+            
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+                
+                PlasmaComponents3.Label {
+                    text: "Choose export format:"
+                    font.bold: true
+                }
+                
+                PlasmaComponents3.Button {
+                    text: "JSON (Single File)"
+                    icon.name: "application-json"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        exportFormatDialog.close()
+                        exportFileDialog.open()
+                    }
+                }
+                
+                PlasmaComponents3.Button {
+                    text: "Markdown (Directory Structure)"
+                    icon.name: "folder-documents"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        exportFormatDialog.close()
+                        exportFolderDialog.open()
+                    }
+                }
+            }
+        }
+        
+        // Import Format Selection Dialog
+        QQC2.Dialog {
+            id: importFormatDialog
+            title: "Import Format"
+            modal: true
+            standardButtons: QQC2.Dialog.Cancel
+            
+            x: Math.round((parent.width - width) / 2)
+            y: Math.round((parent.height - height) / 2)
+            width: Math.min(parent.width * 0.6, Kirigami.Units.gridUnit * 18)
+            
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+                
+                PlasmaComponents3.Label {
+                    text: "Choose import format:"
+                    font.bold: true
+                }
+                
+                PlasmaComponents3.Button {
+                    text: "JSON (Single File)"
+                    icon.name: "application-json"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        importFormatDialog.close()
+                        importFileDialog.open()
+                    }
+                }
+                
+                PlasmaComponents3.Button {
+                    text: "Markdown (Directory Structure)"
+                    icon.name: "folder-documents"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        importFormatDialog.close()
+                        importFolderDialog.open()
+                    }
+                }
             }
         }
     }

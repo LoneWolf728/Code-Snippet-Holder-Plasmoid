@@ -10,17 +10,43 @@ KCM.SimpleKCM {
     id: page
     
     property string cfg_customFilePath
+    property string cfg_storageFormat
     property int cfg_fontSize
     
     Kirigami.FormLayout {
         
-        // Custom File Path Selection
+        // Storage Format Selection
+        QQC2.ComboBox {
+            id: formatCombo
+            Kirigami.FormData.label: "Storage Format:"
+            model: ["JSON (Single File)", "Markdown (Directory)"]
+            currentIndex: plasmoid.configuration.storageFormat === "markdown" ? 1 : 0
+            onCurrentIndexChanged: {
+                var format = currentIndex === 1 ? "markdown" : "json"
+                plasmoid.configuration.storageFormat = format
+                cfg_storageFormat = format
+            }
+        }
+        
+        PlasmaComponents3.Label {
+            text: formatCombo.currentIndex === 0 
+                ? "All snippets stored in a single JSON file."
+                : "Groups become folders. Snippets become individual .md files with frontmatter."
+            font.italic: true
+            opacity: 0.7
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+        }
+        
+        // Custom File/Folder Path Selection
         RowLayout {
-            Kirigami.FormData.label: "Custom Storage File:"
+            Kirigami.FormData.label: formatCombo.currentIndex === 0 ? "Custom Storage File:" : "Custom Storage Folder:"
             
             PlasmaComponents3.TextField {
                 id: pathField
-                placeholderText: "/path/to/my_snippets.json"
+                placeholderText: formatCombo.currentIndex === 0 
+                    ? "/path/to/my_snippets.json" 
+                    : "/path/to/my_snippets/"
                 Layout.fillWidth: true
                 text: plasmoid.configuration.customFilePath
                 onTextChanged: {
@@ -32,12 +58,18 @@ KCM.SimpleKCM {
             PlasmaComponents3.Button {
                 icon.name: "folder-open"
                 text: "Browse..."
-                onClicked: fileDialog.open()
+                onClicked: {
+                    if (formatCombo.currentIndex === 0) {
+                        fileDialog.open()
+                    } else {
+                        folderDialog.open()
+                    }
+                }
             }
         }
         
         PlasmaComponents3.Label {
-            text: "Leave empty to use default internal storage. If set, snippets will be loaded from and saved to this file."
+            text: "Leave empty to use default internal storage. If set, snippets will be loaded from and saved to this location."
             font.italic: true
             opacity: 0.7
             Layout.fillWidth: true
@@ -59,6 +91,7 @@ KCM.SimpleKCM {
         }
     }
     
+    // File dialog for JSON format
     Platform.FileDialog {
         id: fileDialog
         title: "Select Storage File"
@@ -66,6 +99,16 @@ KCM.SimpleKCM {
         fileMode: Platform.FileDialog.SaveFile
         onAccepted: {
             var path = file.toString().replace(/^file:\/\//, '')
+            pathField.text = path
+        }
+    }
+    
+    // Folder dialog for Markdown format
+    Platform.FolderDialog {
+        id: folderDialog
+        title: "Select Storage Folder"
+        onAccepted: {
+            var path = folder.toString().replace(/^file:\/\//, '')
             pathField.text = path
         }
     }
